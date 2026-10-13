@@ -14,6 +14,8 @@ const hermesHome = process.env.HERMES_HOME?.trim() || join(home, '.hermes');
 const autohandHome = process.env.AUTOHAND_HOME?.trim() || join(home, '.autohand');
 const grokHome = process.env.GROK_HOME?.trim() || join(home, '.grok');
 const sarvamHome = process.env.SARVAM_HOME?.trim() || join(home, '.sarvam');
+const bricksCtorHome =
+  process.env.BRICKS_PROJECT_DESKTOP_DATA_DIR?.trim() || join(home, '.bricks-project-desktop');
 const zedAppDataHome = process.env.APPDATA?.trim();
 const zedFlatpakConfigHome = process.env.FLATPAK_XDG_CONFIG_HOME?.trim();
 
@@ -150,6 +152,15 @@ export const agents: Record<AgentType, AgentConfig> = {
     globalSkillsDir: join(home, '.bob/skills'),
     detectInstalled: async () => {
       return existsSync(join(home, '.bob'));
+    },
+  },
+  'bricks-ctor': {
+    name: 'bricks-ctor',
+    displayName: 'BRICKS CTOR',
+    skillsDir: '.bricks/skills',
+    globalSkillsDir: join(bricksCtorHome, 'skills'),
+    detectInstalled: async () => {
+      return existsSync(bricksCtorHome) || existsSync('/Applications/CTOR.app');
     },
   },
   'claude-code': {

@@ -3,7 +3,7 @@
 The CLI for the open agent skills ecosystem.
 
 <!-- agent-list:start -->
-Supports **OpenCode**, **Claude Code**, **Codex**, **Cursor**, and [75 more](#supported-agents).
+Supports **OpenCode**, **Claude Code**, **Codex**, **Cursor**, and [76 more](#supported-agents).
 <!-- agent-list:end -->
 
 <p>
@@ -291,6 +291,7 @@ Skills can be installed to any of these agents:
 | Autohand Code CLI | `autohand-code` | `.autohand/skills/` | `~/.autohand/skills/` |
 | Augment | `augment` | `.augment/skills/` | `~/.augment/skills/` |
 | IBM Bob | `bob` | `.bob/skills/` | `~/.bob/skills/` |
+| BRICKS CTOR | `bricks-ctor` | `.bricks/skills/` | `~/.bricks-project-desktop/skills/` |
 | Claude Code | `claude-code` | `.claude/skills/` | `~/.claude/skills/` |
 | OpenClaw | `openclaw` | `skills/` | `~/.openclaw/skills/` |
 | Cline, Codex, Dexto, fx, Kimi Code CLI, Loaf, Pi, Sarvam Code, Warp, Zed | `cline`, `codex`, `dexto`, `fx`, `kimi-code-cli`, `loaf`, `pi`, `sarvam-code`, `warp`, `zed` | `.agents/skills/` | `~/.agents/skills/` |
@@ -432,6 +433,7 @@ discover `SKILL.md` files outside these container directories (e.g. under
 - `.autohand/skills/`
 - `.augment/skills/`
 - `.bob/skills/`
+- `.bricks/skills/`
 - `.claude/skills/`
 - `.codeartsdoer/skills/`
 - `.codebuddy/skills/`
