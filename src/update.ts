@@ -25,6 +25,7 @@ import {
 } from './skill-relocation.ts';
 import { wellKnownProvider, computeWellKnownSkillDigest } from './providers/index.ts';
 import { removeCommand } from './remove.ts';
+import { listInstalledSkills, type InstalledSkill } from './installer.ts';
 import { sanitizeMetadata } from './sanitize.ts';
 import { track } from './telemetry.ts';
 import { agents, isUniversalAgent } from './agents.ts';
@@ -201,6 +202,22 @@ export function getSkipReason(entry: SkillLockEntry): string {
     return 'No skill path recorded';
   }
   return 'No version tracking';
+}
+
+/**
+ * Resolve the agents that currently have a global copy of a skill. Lock
+ * entries don't record install targets, so default to the universal skills
+ * directory when the skill isn't found in an agent-specific location.
+ */
+export function getGlobalUpdateAgents(
+  skillName: string,
+  installedSkills: Pick<InstalledSkill, 'name' | 'scope' | 'agents'>[]
+): AgentType[] {
+  const installedAgents = installedSkills.find(
+    (skill) => skill.scope === 'global' && skill.name === skillName
+  )?.agents;
+
+  return installedAgents?.length ? installedAgents : ['universal'];
 }
 
 export function getInstallSource(skill: SkippedSkill): string {
@@ -450,6 +467,7 @@ export async function processWellKnownUpdates(
     }
 
     const itemByName = new Map(items.map((item) => [item.name, item]));
+    const installedSkills = isGlobal ? await listInstalledSkills({ global: true }) : [];
 
     for (const name of result.changedSkills) {
       const safeName = sanitizeMetadata(name);
@@ -470,6 +488,7 @@ export async function processWellKnownUpdates(
           '--skill',
           name,
           ...subagentArgs,
+          ...(isGlobal ? ['--agent', ...getGlobalUpdateAgents(name, installedSkills)] : []),
           ...(isGlobal ? ['-g'] : []),
           '-y',
         ],
@@ -697,6 +716,8 @@ export async function updateGlobalSkills(
   console.log(`${TEXT}Found ${updates.length} global update(s)${RESET}`);
   console.log();
 
+  const installedSkills = await listInstalledSkills({ global: true });
+
   for (const update of updates) {
     const safeName = sanitizeMetadata(update.name);
     console.log(`${TEXT}Updating ${safeName}…${RESET}`);
@@ -720,7 +741,18 @@ export async function updateGlobalSkills(
     const fullDepthArgs = shouldUseFullDepthForUpdate(update.entry) ? ['--full-depth'] : [];
     const result = spawnSync(
       process.execPath,
-      [cliEntry, 'add', installUrl, '--skill', update.name, ...fullDepthArgs, '-g', '-y'],
+      [
+        cliEntry,
+        'add',
+        installUrl,
+        '--skill',
+        update.name,
+        '--agent',
+        ...getGlobalUpdateAgents(update.name, installedSkills),
+        ...fullDepthArgs,
+        '-g',
+        '-y',
+      ],
       {
         stdio: ['inherit', 'pipe', 'pipe'],
         encoding: 'utf-8',
