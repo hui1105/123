@@ -55,6 +55,36 @@ describe('searchMultiselect rendering', () => {
     write.mockRestore();
   });
 
+  it('counts a value shown under two groups once', async () => {
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const last = () => stripVTControlCharacters(String(write.mock.calls.at(-1)?.[0]));
+
+    const prompt = searchMultiselect({
+      message: 'Select skills',
+      items: [
+        { value: 'shared', label: 'shared', group: 'Alpha' },
+        { value: 'one', label: 'one', group: 'Alpha' },
+        { value: 'shared', label: 'shared', group: 'Beta' },
+      ],
+      selectAll: true,
+      searchable: false,
+      showDetail: true,
+      showSelectedSummary: true,
+    });
+
+    expect(last()).toContain('Select All (0/2)');
+    expect(last()).toContain('Select or clear all 2 skills.');
+
+    process.stdin.emit('keypress', '', { name: 'space' });
+    expect(last()).toContain('Select All (2/2)');
+    expect(last()).toContain('Selected: shared, one');
+
+    process.stdin.emit('keypress', '', { name: 'return' });
+    await expect(prompt).resolves.toEqual(['shared', 'one']);
+    expect(last()).toContain('│  shared, one\n');
+    write.mockRestore();
+  });
+
   it('keeps the full prompt inside a short terminal viewport', async () => {
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     const originalRows = Object.getOwnPropertyDescriptor(process.stdout, 'rows');

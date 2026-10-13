@@ -647,6 +647,11 @@ function logAutoSelectedSkills(entries: Array<{ label: string; description?: str
   if (only.description) p.log.message(pc.dim(only.description));
 }
 
+/** The plugin group a skill is recorded and summarized under: its first one. */
+function primaryPluginName(skill: Skill): string | undefined {
+  return skill.pluginNames?.[0];
+}
+
 async function handleWellKnownSkills(
   source: string,
   url: string,
@@ -1270,7 +1275,7 @@ async function installToTargets(
       results.push({
         skill: getSkillDisplayName(skill),
         agent: targetDisplayName(target),
-        pluginName: skill.pluginName,
+        pluginName: primaryPluginName(skill),
         ...result,
       });
     }
@@ -1657,10 +1662,11 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       const ungroupedSkills: Skill[] = [];
 
       for (const skill of skills) {
-        if (skill.pluginName) {
-          const group = skill.pluginName;
-          if (!groupedSkills[group]) groupedSkills[group] = [];
-          groupedSkills[group].push(skill);
+        if (skill.pluginNames?.length) {
+          for (const group of skill.pluginNames) {
+            if (!groupedSkills[group]) groupedSkills[group] = [];
+            groupedSkills[group].push(skill);
+          }
         } else {
           ungroupedSkills.push(skill);
         }
@@ -1741,18 +1747,27 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       selectedSkills = skills;
       logChosen(selectedSkills);
     } else {
-      // Sort skills by plugin name first, then by skill name
-      const sortedSkills = [...skills].sort((a, b) => {
-        if (a.pluginName && !b.pluginName) return -1;
-        if (!a.pluginName && b.pluginName) return 1;
-        if (a.pluginName && b.pluginName && a.pluginName !== b.pluginName) {
-          return a.pluginName.localeCompare(b.pluginName);
+      // One entry per skill and plugin group, so a skill listed by several
+      // plugins shows under each; selection stays per skill (same value).
+      const entries = skills.flatMap((skill) =>
+        (skill.pluginNames?.length ? skill.pluginNames : [undefined]).map((group) => ({
+          skill,
+          group,
+        }))
+      );
+
+      // Sort entries by plugin name first, then by skill name
+      entries.sort((a, b) => {
+        if (a.group && !b.group) return -1;
+        if (!a.group && b.group) return 1;
+        if (a.group && b.group && a.group !== b.group) {
+          return a.group.localeCompare(b.group);
         }
-        return getSkillDisplayName(a).localeCompare(getSkillDisplayName(b));
+        return getSkillDisplayName(a.skill).localeCompare(getSkillDisplayName(b.skill));
       });
 
       // Check if any skills have plugin grouping
-      const hasGroups = sortedSkills.some((s) => s.pluginName);
+      const hasGroups = entries.some((e) => e.group);
 
       const kebabToTitle = (s: string) =>
         s
@@ -1760,11 +1775,11 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
           .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
           .join(' ');
 
-      const skillChoices = sortedSkills.map((s) => ({
-        value: s,
-        label: getSkillDisplayName(s),
-        group: hasGroups ? (s.pluginName ? kebabToTitle(s.pluginName) : 'Other') : undefined,
-        detail: s.description,
+      const skillChoices = entries.map(({ skill, group }) => ({
+        value: skill,
+        label: getSkillDisplayName(skill),
+        group: hasGroups ? (group ? kebabToTitle(group) : 'Other') : undefined,
+        detail: skill.description,
       }));
 
       const selected = await searchMultiselect({
@@ -2054,8 +2069,9 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
     const ungroupedSummary: Skill[] = [];
 
     for (const skill of selectedSkills) {
-      if (skill.pluginName) {
-        const group = skill.pluginName;
+      // Summarize each skill once, under its first plugin group
+      const group = primaryPluginName(skill);
+      if (group) {
         if (!groupedSummary[group]) groupedSummary[group] = [];
         groupedSummary[group].push(skill);
       } else {
@@ -2267,7 +2283,7 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
               ref: parsed.ref,
               skillPath: skillPathValue,
               skillFolderHash,
-              pluginName: skill.pluginName,
+              pluginName: primaryPluginName(skill),
             });
           } catch {
             // Don't fail installation if lock file update fails
