@@ -253,6 +253,12 @@ export function toggleSearchEntry<T>(selected: Set<T>, entry: SearchEntry<T> | u
   }
 }
 
+/** Items with one entry per value; an item shown under several groups counts once. */
+function distinctItems<T>(items: SearchItem<T>[]): SearchItem<T>[] {
+  const seen = new Set<T>();
+  return items.filter((item) => !seen.has(item.value) && seen.add(item.value));
+}
+
 export type SelectAllState = 'none' | 'partial' | 'all';
 
 /** Return the aggregate selection state represented by a Select All row. */
@@ -341,6 +347,7 @@ export async function searchMultiselect<T>(
       const filtered = getFiltered();
       const entries = buildSearchEntries(filtered, selectGroups, collapsedGroups);
       const hasSelectAll = selectAll && items.length > 0;
+      const uniqueItems = distinctItems(items);
       const entryCursor = cursor - (hasSelectAll ? 1 : 0);
 
       // Header
@@ -374,7 +381,7 @@ export async function searchMultiselect<T>(
         }
 
         if (hasSelectAll) {
-          const selectedCount = items.filter((item) => selected.has(item.value)).length;
+          const selectedCount = uniqueItems.filter((item) => selected.has(item.value)).length;
           const selectAllState = getSelectAllState(selected, items);
           const radio =
             selectAllState === 'all'
@@ -386,7 +393,7 @@ export async function searchMultiselect<T>(
           const prefix = isCursor ? pc.cyan('❯') : ' ';
           const label = isCursor ? pc.underline(pc.bold('Select All')) : pc.bold('Select All');
           lines.push(
-            `${S_BAR} ${prefix} ${radio} ${label} ${pc.dim(`(${selectedCount}/${items.length})`)}`
+            `${S_BAR} ${prefix} ${radio} ${label} ${pc.dim(`(${selectedCount}/${uniqueItems.length})`)}`
           );
           lines.push(`${S_BAR}   ${S_BAR_H.repeat(36)}`);
         }
@@ -404,7 +411,7 @@ export async function searchMultiselect<T>(
             const entry = entries[entryCursor];
             const detail =
               hasSelectAll && cursor === 0
-                ? `Select or clear all ${items.length} skills.`
+                ? `Select or clear all ${uniqueItems.length} skills.`
                 : entry?.type === 'group'
                   ? `Select all ${entry.items.length} skills in ${entry.group}.`
                   : entry?.item.detail;
@@ -422,7 +429,7 @@ export async function searchMultiselect<T>(
             footerLines.push(`${S_BAR}`);
             const allSelectedLabels = [
               ...(lockedSection ? lockedSection.items.map((i) => i.label) : []),
-              ...items.filter((item) => selected.has(item.value)).map((item) => item.label),
+              ...uniqueItems.filter((item) => selected.has(item.value)).map((item) => item.label),
             ];
             if (allSelectedLabels.length === 0) {
               footerLines.push(`${S_BAR}  ${pc.dim('Selected: (none)')}`);
@@ -549,7 +556,7 @@ export async function searchMultiselect<T>(
         // Final state - show what was selected (including locked)
         const allSelectedLabels = [
           ...(lockedSection ? lockedSection.items.map((i) => i.label) : []),
-          ...items.filter((item) => selected.has(item.value)).map((item) => item.label),
+          ...uniqueItems.filter((item) => selected.has(item.value)).map((item) => item.label),
         ];
         lines.push(`${S_BAR}  ${pc.dim(allSelectedLabels.join(', '))}`);
       } else if (state === 'cancel') {

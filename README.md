@@ -87,6 +87,7 @@ For GitHub tree lookups, `skills` first tries the API anonymously, then an expli
 | `-g, --global`            | Install to user directory instead of project                                                                                                       |
 | `-a, --agent <agents...>` | <!-- agent-names:start -->Target specific agents (e.g., `claude-code`, `codex`). See [Supported Agents](#supported-agents)<!-- agent-names:end --> |
 | `-s, --skill <skills...>` | Install specific skills by name (use `'*'` for all skills)                                                                                         |
+| `--group <groups...>`     | Install every skill in the named plugin groups, without a prompt (comma-separated or repeated; combines with `--skill`)                            |
 | `-l, --list`              | List available skills without installing                                                                                                           |
 | `--copy`                  | Copy files instead of symlinking to agent directories                                                                                              |
 | `-y, --yes`               | Skip all confirmation prompts                                                                                                                      |
@@ -100,6 +101,13 @@ npx skills add vercel-labs/agent-skills --list
 
 # Install specific skills
 npx skills add vercel-labs/agent-skills --skill frontend-design --skill skill-creator
+
+# Install every skill in a plugin group (plugin name from .claude-plugin/marketplace.json;
+# the title-cased name shown by --list, e.g. "Document Skills", works too)
+npx skills add anthropics/skills --group document-skills
+
+# Install several groups plus one extra skill (a skill in more than one group installs once)
+npx skills add owner/repo --group document-skills,example-skills --skill skill-creator
 
 # Install a skill with spaces in the name (must be quoted)
 npx skills add owner/repo --skill "Convex Best Practices"

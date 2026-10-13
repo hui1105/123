@@ -111,14 +111,27 @@ export async function getPluginSkillPaths(basePath: string): Promise<string[]> {
   return searchDirs;
 }
 
+/** Add a plugin name to a skill's group list unless it is already there. */
+export function appendPluginName(names: string[], pluginName: string): void {
+  if (!names.includes(pluginName)) names.push(pluginName);
+}
+
 /**
  * Get a map of skill directory paths to plugin names from plugin manifests.
- * This allows grouping skills by their parent plugin.
+ * This allows grouping skills by their parent plugins. A skill listed by
+ * several plugins belongs to each of them, in manifest order.
  *
- * Returns Map<AbsolutePath, PluginName>
+ * Returns Map<AbsolutePath, PluginName[]>
  */
-export async function getPluginGroupings(basePath: string): Promise<Map<string, string>> {
-  const groupings = new Map<string, string>();
+export async function getPluginGroupings(basePath: string): Promise<Map<string, string[]>> {
+  const groupings = new Map<string, string[]>();
+  const addGrouping = (skillDir: string, pluginName: string) => {
+    // Store absolute path as key for reliable matching
+    const key = resolve(skillDir);
+    const names = groupings.get(key) ?? [];
+    appendPluginName(names, pluginName);
+    groupings.set(key, names);
+  };
 
   // Try marketplace.json (multi-plugin catalog)
   try {
@@ -151,8 +164,7 @@ export async function getPluginGroupings(basePath: string): Promise<Map<string, 
 
             const skillDir = join(pluginBase, skillPath);
             if (isContainedIn(skillDir, basePath)) {
-              // Store absolute path as key for reliable matching
-              groupings.set(resolve(skillDir), plugin.name);
+              addGrouping(skillDir, plugin.name);
             }
           }
         }
@@ -171,7 +183,7 @@ export async function getPluginGroupings(basePath: string): Promise<Map<string, 
         if (!isValidRelativePath(skillPath)) continue;
         const skillDir = join(basePath, skillPath);
         if (isContainedIn(skillDir, basePath)) {
-          groupings.set(resolve(skillDir), manifest.name);
+          addGrouping(skillDir, manifest.name);
         }
       }
     }
