@@ -569,6 +569,11 @@ export interface AddOptions {
   agent?: string[];
   yes?: boolean;
   skill?: string[];
+  /**
+   * Plugin groups to install whole. Values are plugin names from the manifest
+   * (or the title-cased form the prompt shows); combines with `skill` as a union.
+   */
+  group?: string[];
   /** Valid JSON to attach to the install telemetry event. */
   metadata?: string;
   list?: boolean;
@@ -647,11 +652,47 @@ function logAutoSelectedSkills(entries: Array<{ label: string; description?: str
   if (only.description) p.log.message(pc.dim(only.description));
 }
 
+/** The plugin group a skill is recorded and summarized under: its first one. */
+function primaryPluginName(skill: Skill): string | undefined {
+  return skill.pluginNames?.[0];
+}
+
+/** Lowercased kebab form, so `Document Skills` (as the prompt shows it) matches `document-skills`. */
+function normalizeGroupName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, '-');
+}
+
+/**
+ * Skills whose plugin groups include any requested group. Requested names that
+ * match no group are returned in `unknown`; `available` lists every group name.
+ */
+function findSkillsInGroups(
+  skills: Skill[],
+  requested: string[]
+): { matched: Skill[]; unknown: string[]; available: string[] } {
+  const available = [...new Set(skills.flatMap((s) => s.pluginNames ?? []))].sort();
+  const wanted = new Set<string>();
+  const unknown: string[] = [];
+  for (const name of requested) {
+    const group = available.find((g) => normalizeGroupName(g) === normalizeGroupName(name));
+    if (group) wanted.add(group);
+    else unknown.push(name);
+  }
+  const matched = skills.filter((s) => s.pluginNames?.some((g) => wanted.has(g)));
+  return { matched, unknown, available };
+}
+
+/** Error line for requested group names that match no plugin group. */
+function unknownGroupsMessage(unknown: string[]): string {
+  return `Unknown group${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}`;
+}
+
 async function handleWellKnownSkills(
   source: string,
   url: string,
   options: AddOptions,
-  spinner: ReturnType<typeof p.spinner>
+  spinner: ReturnType<typeof p.spinner>,
+  exit: (code: number, errorMessage?: string) => never
 ): Promise<boolean> {
   spinner.start('Discovering skills from well-known endpoint...');
 
@@ -700,6 +741,14 @@ async function handleWellKnownSkills(
     console.log();
     p.outro('Run without --list to install');
     process.exit(0);
+  }
+
+  if (options.group?.length) {
+    // Same reporting as the main path; there is no temp dir to clean up here.
+    const message = unknownGroupsMessage(options.group);
+    p.log.error(message);
+    p.log.info('This source defines no plugin groups.');
+    exit(1, `${message}. Available groups: none`);
   }
 
   // Filter skills if --skill option is provided
@@ -1270,7 +1319,7 @@ async function installToTargets(
       results.push({
         skill: getSkillDisplayName(skill),
         agent: targetDisplayName(target),
-        pluginName: skill.pluginName,
+        pluginName: primaryPluginName(skill),
         ...result,
       });
     }
@@ -1589,7 +1638,13 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
         // feed the JSON accumulator yet.
         emitJsonAndExit(1, '--json is not yet supported for well-known skill sources.');
       }
-      const handled = await handleWellKnownSkills(source, parsed.url, options, spinner);
+      const handled = await handleWellKnownSkills(
+        source,
+        parsed.url,
+        options,
+        spinner,
+        emitJsonAndExit
+      );
       if (handled) return;
       directDownload = true;
     }
@@ -1657,10 +1712,11 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       const ungroupedSkills: Skill[] = [];
 
       for (const skill of skills) {
-        if (skill.pluginName) {
-          const group = skill.pluginName;
-          if (!groupedSkills[group]) groupedSkills[group] = [];
-          groupedSkills[group].push(skill);
+        if (skill.pluginNames?.length) {
+          for (const group of skill.pluginNames) {
+            if (!groupedSkills[group]) groupedSkills[group] = [];
+            groupedSkills[group].push(skill);
+          }
         } else {
           ungroupedSkills.push(skill);
         }
@@ -1693,7 +1749,11 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       }
 
       console.log();
-      p.outro('Use --skill <name> to install specific skills');
+      p.outro(
+        sortedGroups.length > 0
+          ? 'Use --skill <name> or --group <name> to install specific skills or whole groups'
+          : 'Use --skill <name> to install specific skills'
+      );
       await cleanup(tempDir);
       emitJsonAndExit(0);
     }
@@ -1708,32 +1768,56 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       // --skill '*' selects all skills
       selectedSkills = skills;
       logChosen(selectedSkills);
-    } else if (options.skill && options.skill.length > 0) {
-      selectedSkills = filterSkills(skills, options.skill);
+    } else if (options.skill?.length || options.group?.length) {
+      // --group and --skill combine as a union, kept in discovery order.
+      const chosen = new Set<Skill>();
 
-      // Requested names that matched nothing are reported as skipped entries.
-      if (jsonMode) {
-        for (const requested of options.skill) {
-          if (filterSkills(skills, [requested]).length === 0) {
-            jsonResults.push({
-              name: requested,
-              status: 'skipped',
-              reason: 'No matching skill found in source',
-            });
+      if (options.group?.length) {
+        const { matched, unknown, available } = findSkillsInGroups(skills, options.group);
+        if (unknown.length > 0) {
+          const message = unknownGroupsMessage(unknown);
+          p.log.error(message);
+          if (available.length > 0) {
+            p.log.info('Available groups:');
+            for (const group of available) p.log.message(`  - ${group}`);
+          } else {
+            p.log.info('This source defines no plugin groups.');
+          }
+          await cleanup(tempDir);
+          emitJsonAndExit(1, `${message}. Available groups: ${available.join(', ') || 'none'}`);
+        }
+        for (const skill of matched) chosen.add(skill);
+      }
+
+      if (options.skill?.length) {
+        const bySkill = filterSkills(skills, options.skill);
+
+        // Requested names that matched nothing are reported as skipped entries.
+        if (jsonMode) {
+          for (const requested of options.skill) {
+            if (filterSkills(skills, [requested]).length === 0) {
+              jsonResults.push({
+                name: requested,
+                status: 'skipped',
+                reason: 'No matching skill found in source',
+              });
+            }
           }
         }
-      }
 
-      if (selectedSkills.length === 0) {
-        p.log.error(`No matching skills found for: ${options.skill.join(', ')}`);
-        p.log.info('Available skills:');
-        for (const s of skills) {
-          p.log.message(`  - ${getSkillDisplayName(s)}`);
+        if (bySkill.length === 0) {
+          p.log.error(`No matching skills found for: ${options.skill.join(', ')}`);
+          p.log.info('Available skills:');
+          for (const s of skills) {
+            p.log.message(`  - ${getSkillDisplayName(s)}`);
+          }
+          await cleanup(tempDir);
+          emitJsonAndExit(1, `No matching skills found for: ${options.skill.join(', ')}`);
         }
-        await cleanup(tempDir);
-        emitJsonAndExit(1, `No matching skills found for: ${options.skill.join(', ')}`);
+        for (const skill of bySkill) chosen.add(skill);
       }
 
+      selectedSkills = skills.filter((skill) => chosen.has(skill));
       p.log.info(
         `Selected ${selectedSkills.length} skill${selectedSkills.length !== 1 ? 's' : ''}: ${selectedSkills.map((s) => pc.cyan(getSkillDisplayName(s))).join(', ')}`
       );
@@ -1741,18 +1825,27 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       selectedSkills = skills;
       logChosen(selectedSkills);
     } else {
-      // Sort skills by plugin name first, then by skill name
-      const sortedSkills = [...skills].sort((a, b) => {
-        if (a.pluginName && !b.pluginName) return -1;
-        if (!a.pluginName && b.pluginName) return 1;
-        if (a.pluginName && b.pluginName && a.pluginName !== b.pluginName) {
-          return a.pluginName.localeCompare(b.pluginName);
+      // One entry per skill and plugin group, so a skill listed by several
+      // plugins shows under each; selection stays per skill (same value).
+      const entries = skills.flatMap((skill) =>
+        (skill.pluginNames?.length ? skill.pluginNames : [undefined]).map((group) => ({
+          skill,
+          group,
+        }))
+      );
+
+      // Sort entries by plugin name first, then by skill name
+      entries.sort((a, b) => {
+        if (a.group && !b.group) return -1;
+        if (!a.group && b.group) return 1;
+        if (a.group && b.group && a.group !== b.group) {
+          return a.group.localeCompare(b.group);
         }
-        return getSkillDisplayName(a).localeCompare(getSkillDisplayName(b));
+        return getSkillDisplayName(a.skill).localeCompare(getSkillDisplayName(b.skill));
       });
 
       // Check if any skills have plugin grouping
-      const hasGroups = sortedSkills.some((s) => s.pluginName);
+      const hasGroups = entries.some((e) => e.group);
 
       const kebabToTitle = (s: string) =>
         s
@@ -1760,11 +1853,11 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
           .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
           .join(' ');
 
-      const skillChoices = sortedSkills.map((s) => ({
-        value: s,
-        label: getSkillDisplayName(s),
-        group: hasGroups ? (s.pluginName ? kebabToTitle(s.pluginName) : 'Other') : undefined,
-        detail: s.description,
+      const skillChoices = entries.map(({ skill, group }) => ({
+        value: skill,
+        label: getSkillDisplayName(skill),
+        group: hasGroups ? (group ? kebabToTitle(group) : 'Other') : undefined,
+        detail: skill.description,
       }));
 
       const selected = await searchMultiselect({
@@ -2054,8 +2147,9 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
     const ungroupedSummary: Skill[] = [];
 
     for (const skill of selectedSkills) {
-      if (skill.pluginName) {
-        const group = skill.pluginName;
+      // Summarize each skill once, under its first plugin group
+      const group = primaryPluginName(skill);
+      if (group) {
         if (!groupedSummary[group]) groupedSummary[group] = [];
         groupedSummary[group].push(skill);
       } else {
@@ -2267,7 +2361,7 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
               ref: parsed.ref,
               skillPath: skillPathValue,
               skillFolderHash,
-              pluginName: skill.pluginName,
+              pluginName: primaryPluginName(skill),
             });
           } catch {
             // Don't fail installation if lock file update fails
@@ -2606,6 +2700,16 @@ export function parseAddOptions(args: string[]): {
       let nextArg = args[i];
       while (i < args.length && nextArg && !nextArg.startsWith('-')) {
         options.skill.push(nextArg);
+        i++;
+        nextArg = args[i];
+      }
+      i--; // Back up one since the loop will increment
+    } else if (arg === '--group') {
+      options.group = options.group || [];
+      i++;
+      let nextArg = args[i];
+      while (i < args.length && nextArg && !nextArg.startsWith('-')) {
+        options.group.push(...nextArg.split(',').filter(Boolean));
         i++;
         nextArg = args[i];
       }

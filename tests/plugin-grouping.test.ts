@@ -20,7 +20,7 @@ describe('getPluginGroupings', () => {
         {
           name: 'example-skills',
           source: './',
-          skills: ['./skills/art'],
+          skills: ['./skills/art', './skills/xlsx'],
         },
       ],
     };
@@ -32,16 +32,16 @@ describe('getPluginGroupings', () => {
     await rm(TEST_DIR, { recursive: true, force: true });
   });
 
-  it('should map skill paths to plugin names', async () => {
+  it('should map skill paths to the names of every plugin listing them', async () => {
     const groupings = await getPluginGroupings(TEST_DIR);
 
     const xlsxPath = resolve(TEST_DIR, 'skills/xlsx');
     const docxPath = resolve(TEST_DIR, 'skills/docx');
     const artPath = resolve(TEST_DIR, 'skills/art');
 
-    expect(groupings.get(xlsxPath)).toBe('document-skills');
-    expect(groupings.get(docxPath)).toBe('document-skills');
-    expect(groupings.get(artPath)).toBe('example-skills');
+    expect(groupings.get(xlsxPath)).toEqual(['document-skills', 'example-skills']);
+    expect(groupings.get(docxPath)).toEqual(['document-skills']);
+    expect(groupings.get(artPath)).toEqual(['example-skills']);
   });
 
   it('should handle nested plugin sources', async () => {
@@ -67,6 +67,6 @@ describe('getPluginGroupings', () => {
     // path = nestedDir/plugins/my-plugin/skills/deep
     const expectedPath = resolve(nestedDir, 'plugins/my-plugin/skills/deep');
 
-    expect(groupings.get(expectedPath)).toBe('nested-plugin');
+    expect(groupings.get(expectedPath)).toEqual(['nested-plugin']);
   });
 });

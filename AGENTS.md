@@ -60,11 +60,13 @@ src/
 └── test-utils.ts    # Test utilities
 
 tests/
+├── add-group-flag.test.ts       # add --group (install whole plugin groups)
 ├── cross-platform-paths.test.ts # Path normalization across platforms
 ├── full-depth-discovery.test.ts # --full-depth skill discovery tests
 ├── openclaw-paths.test.ts       # OpenClaw-specific path tests
 ├── plugin-manifest-discovery.test.ts # Plugin manifest skill discovery
 ├── sanitize-name.test.ts     # Tests for sanitizeName (path traversal prevention)
+├── skill-in-several-plugins.test.ts # A skill listed by several plugins
 ├── skill-matching.test.ts    # Tests for filterSkills (multi-word skill name matching)
 ├── source-parser.test.ts     # Tests for URL/path parsing
 ├── installer-symlink.test.ts # Tests for symlink installation

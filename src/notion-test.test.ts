@@ -206,8 +206,8 @@ describe('Notion pack prototype', () => {
     cleanupDirs.push(prepared!.tempDir);
     const stagedSkills = await discoverSkills(prepared!.rootDir, undefined, { fullDepth: true });
     expect(
-      stagedSkills.map((skill) => ({ name: skill.name, pluginName: skill.pluginName }))
-    ).toEqual([{ name: 'write-update', pluginName: 'Company-wide' }]);
+      stagedSkills.map((skill) => ({ name: skill.name, pluginNames: skill.pluginNames }))
+    ).toEqual([{ name: 'write-update', pluginNames: ['Company-wide'] }]);
     expect(prepared).toMatchObject({ packCount: 1, skillCount: 1 });
     // list + workspace probe, then the pack directory lookup
     expect(runNtn).toHaveBeenCalledTimes(3);
