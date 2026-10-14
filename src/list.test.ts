@@ -167,6 +167,32 @@ description: ${description}
       expect(names).toContain('skill-beta');
     });
 
+    it('should include disableModelInvocation in --json output only when true', () => {
+      createTestSkill(testDir, 'normal-skill', 'Normal skill');
+      const hiddenDir = join(testDir, '.agents', 'skills', 'hidden-skill');
+      mkdirSync(hiddenDir, { recursive: true });
+      writeFileSync(
+        join(hiddenDir, 'SKILL.md'),
+        `---
+name: hidden-skill
+description: Hidden skill
+disable-model-invocation: true
+---
+# hidden-skill
+`
+      );
+
+      const result = runCli(['list', '--json'], testDir);
+      expect(result.exitCode).toBe(0);
+      const parsed = JSON.parse(result.stdout.trim());
+      const normalSkill = parsed.find((s: any) => s.name === 'normal-skill');
+      const hiddenSkill = parsed.find((s: any) => s.name === 'hidden-skill');
+      expect(normalSkill).toBeDefined();
+      expect(normalSkill).not.toHaveProperty('disableModelInvocation');
+      expect(hiddenSkill).toBeDefined();
+      expect(hiddenSkill.disableModelInvocation).toBe(true);
+    });
+
     it('should show message when no project skills found', () => {
       const result = runCli(['list'], testDir);
       expect(result.stdout).toContain('No project skills found');
