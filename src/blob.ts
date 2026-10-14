@@ -309,6 +309,7 @@ const PRIORITY_PREFIXES = [
   'skills/.curated/',
   'skills/.experimental/',
   'skills/.system/',
+  'agent-data/workflows/',
   '.agents/skills/',
   '.claude/skills/',
   '.cline/skills/',

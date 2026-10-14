@@ -32,6 +32,7 @@ export type AgentType =
   | 'github-copilot'
   | 'goose'
   | 'grok'
+  | 'grok-bot'
   | 'hermes-agent'
   | 'inference-sh'
   | 'iflow-cli'

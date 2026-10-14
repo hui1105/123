@@ -394,6 +394,15 @@ export const agents: Record<AgentType, AgentConfig> = {
       return existsSync(grokHome);
     },
   },
+  'grok-bot': {
+    name: 'grok-bot',
+    displayName: 'Grok Bot',
+    skillsDir: 'agent-data/workflows',
+    globalSkillsDir: join(home, 'agent-data/workflows'),
+    detectInstalled: async () => {
+      return existsSync(join(home, 'agent-data/workflows'));
+    },
+  },
   'hermes-agent': {
     name: 'hermes-agent',
     displayName: 'Hermes Agent',

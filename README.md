@@ -3,7 +3,7 @@
 The CLI for the open agent skills ecosystem.
 
 <!-- agent-list:start -->
-Supports **OpenCode**, **Claude Code**, **Codex**, **Cursor**, and [75 more](#supported-agents).
+Supports **OpenCode**, **Claude Code**, **Codex**, **Cursor**, and [76 more](#supported-agents).
 <!-- agent-list:end -->
 
 <p>
@@ -313,6 +313,7 @@ Skills can be installed to any of these agents:
 | GitHub Copilot | `github-copilot` | `.agents/skills/` | `~/.copilot/skills/` |
 | Goose | `goose` | `.goose/skills/` | `~/.config/goose/skills/` |
 | Grok Build | `grok` | `.grok/skills/` | `~/.grok/skills/` |
+| Grok Bot | `grok-bot` | `agent-data/workflows/` | `~/agent-data/workflows/` |
 | Hermes Agent | `hermes-agent` | `.hermes/skills/` | `~/.hermes/skills/` |
 | inference.sh | `inference-sh` | `.inferencesh/skills/` | `~/.inferencesh/skills/` |
 | Jazz | `jazz` | `.jazz/skills/` | `~/.jazz/skills/` |
@@ -446,6 +447,7 @@ discover `SKILL.md` files outside these container directories (e.g. under
 - `.forge/skills/`
 - `.goose/skills/`
 - `.grok/skills/`
+- `agent-data/workflows/`
 - `.hermes/skills/`
 - `.inferencesh/skills/`
 - `.jazz/skills/`
