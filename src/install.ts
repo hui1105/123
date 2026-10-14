@@ -35,7 +35,15 @@ export async function runInstallFromLock(args: string[]): Promise<void> {
 
   // Separate node_modules skills from remote skills
   const nodeModuleSkills: string[] = [];
-  const bySource = new Map<string, { sourceType: string; skills: string[] }>();
+  const bySource = new Map<
+    string,
+    {
+      source: string;
+      sourceType: string;
+      disableModelInvocation: boolean;
+      skills: string[];
+    }
+  >();
 
   for (const [skillName, entry] of skillEntries) {
     if (entry.sourceType === 'node_modules') {
@@ -50,12 +58,16 @@ export async function runInstallFromLock(args: string[]): Promise<void> {
       );
       continue;
     }
-    const existing = bySource.get(installSource);
+    const disableModelInvocation = entry.disableModelInvocation === true;
+    const groupKey = `${installSource}\n${disableModelInvocation ? '1' : '0'}`;
+    const existing = bySource.get(groupKey);
     if (existing) {
       existing.skills.push(skillName);
     } else {
-      bySource.set(installSource, {
+      bySource.set(groupKey, {
+        source: installSource,
         sourceType: entry.sourceType,
+        disableModelInvocation,
         skills: [skillName],
       });
     }
@@ -69,15 +81,21 @@ export async function runInstallFromLock(args: string[]): Promise<void> {
   }
 
   // Install remote skills grouped by source
-  for (const [source, { sourceType, skills }] of bySource) {
+  for (const { source, sourceType, disableModelInvocation, skills } of bySource.values()) {
     // well-known sources go through their provider flow, which installs on its own
     if (sourceType === 'well-known') {
-      await runAdd([source], { skill: skills, agent: universalAgentNames, yes: true });
+      await runAdd([source], {
+        skill: skills,
+        agent: universalAgentNames,
+        yes: true,
+        ...(disableModelInvocation && { disableModelInvocation: true }),
+      });
       continue;
     }
     const result = await installFromSource(parseSource(source), {
       skills,
       agents: universalAgentNames,
+      ...(disableModelInvocation && { disableModelInvocation: true }),
     });
     if (result.error) {
       p.log.error(`Failed to install from ${pc.cyan(source)}: ${result.error}`);

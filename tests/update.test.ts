@@ -1083,6 +1083,39 @@ describe('Update Cleanup Unit Tests', () => {
       expect((options as { env?: NodeJS.ProcessEnv }).env?.GH_HOST).toBe('github.com');
     });
 
+    it('passes --disable-model-invocation when updating a global skill with disableModelInvocation in lock', async () => {
+      vi.mocked(skillLock.readSkillLock).mockResolvedValue({
+        version: 3,
+        skills: {
+          'skill-a': {
+            source: 'owner/repo',
+            sourceUrl: 'https://github.com/owner/repo.git',
+            skillPath: 'skills/skill-a/SKILL.md',
+            sourceType: 'github',
+            skillFolderHash: 'old-hash',
+            installedAt: '',
+            updatedAt: '',
+            disableModelInvocation: true,
+          },
+        },
+      });
+      vi.mocked(blob.fetchRepoTree).mockResolvedValue({
+        sha: 'rootsha',
+        branch: 'main',
+        tree: [{ path: 'skills/skill-a/SKILL.md', type: 'blob', sha: 'sha1' }],
+      });
+      vi.mocked(blob.getSkillFolderHashFromTree).mockReturnValue('new-hash');
+
+      await updateGlobalSkills({ yes: true });
+
+      const installCall = vi
+        .mocked(spawnSync)
+        .mock.calls.find((call) => Array.isArray(call[1]) && call[1].includes('add'));
+      expect(installCall).toBeDefined();
+      const [, argv] = installCall!;
+      expect(argv).toContain('--disable-model-invocation');
+    });
+
     it('keeps GitHub Enterprise updates on their recorded URL and targets one skill', async () => {
       vi.stubEnv('GH_HOST', 'github.example.com');
       vi.mocked(skillLock.readSkillLock).mockResolvedValue({
@@ -1209,6 +1242,32 @@ describe('Update Cleanup Unit Tests', () => {
       await runUpdate(['--project', '--yes']);
 
       expect(process.exitCode).toBeUndefined();
+    });
+
+    it('passes --disable-model-invocation on project update when set in skills-lock.json', async () => {
+      vi.mocked(localLock.readLocalLock).mockResolvedValue({
+        version: 1,
+        skills: {
+          'skill-a': {
+            source: 'owner/repo',
+            skillPath: 'skills/skill-a/SKILL.md',
+            sourceType: 'github',
+            computedHash: 'abc',
+            disableModelInvocation: true,
+          },
+        },
+      });
+      vi.mocked(localLock.computeSkillFolderHash).mockResolvedValue('new-hash');
+      vi.mocked(spawnSync).mockReturnValue({ status: 0 } as ReturnType<typeof spawnSync>);
+
+      await updateProjectSkills({ yes: true });
+
+      const installCall = vi
+        .mocked(spawnSync)
+        .mock.calls.find((call) => Array.isArray(call[1]) && call[1].includes('add'));
+      expect(installCall).toBeDefined();
+      const [, argv] = installCall!;
+      expect(argv).toContain('--disable-model-invocation');
     });
   });
 });

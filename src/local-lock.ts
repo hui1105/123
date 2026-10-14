@@ -47,6 +47,8 @@ export interface LocalSkillLockEntry {
    */
   subagents?: string[];
   wellKnownDigest?: string;
+  /** When true, re-apply disable-model-invocation: true in SKILL.md on update/install */
+  disableModelInvocation?: boolean;
 }
 
 /**

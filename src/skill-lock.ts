@@ -35,6 +35,8 @@ export interface SkillLockEntry {
   pluginName?: string;
   sourceBaseUrl?: string;
   wellKnownDigest?: string;
+  /** When true, re-apply disable-model-invocation: true in SKILL.md on update */
+  disableModelInvocation?: boolean;
 }
 
 /**

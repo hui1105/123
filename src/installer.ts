@@ -26,7 +26,7 @@ import {
   EVE_SUBAGENTS_DIR,
 } from './agents.ts';
 import { AGENTS_DIR, SKILLS_SUBDIR } from './constants.ts';
-import { parseFrontmatter } from './frontmatter.ts';
+import { parseFrontmatter, applyDisableModelInvocation } from './frontmatter.ts';
 import { stringify } from 'yaml';
 import { parseSkillMd } from './skills.ts';
 
@@ -44,6 +44,8 @@ interface InstallOptions {
   eveSubagent?: string;
   /** Create a missing agent-specific project root because the user selected this agent. */
   createMissingAgentRoot?: boolean;
+  /** Set `disable-model-invocation: true` in the installed SKILL.md frontmatter. */
+  disableModelInvocation?: boolean;
 }
 
 interface InstallResult {
@@ -371,7 +373,7 @@ export async function installSkillForAgent(
     // For copy mode, skip canonical directory and copy directly to agent location
     if (installMode === 'copy') {
       await cleanAndCreateDirectory(agentDir);
-      await copyDirectory(skill.path, agentDir, agentType);
+      await copyDirectory(skill.path, agentDir, agentType, options.disableModelInvocation);
 
       return {
         success: true,
@@ -390,16 +392,16 @@ export async function installSkillForAgent(
       };
     }
 
-    if (installMode === 'link') {
+    if (installMode === 'link' && !options.disableModelInvocation) {
       // Link mode: the canonical dir itself points at the source, nothing is copied.
       if (!(await createSymlink(skill.path, canonicalDir))) {
         await cleanAndCreateDirectory(canonicalDir);
-        await copyDirectory(skill.path, canonicalDir, agentType);
+        await copyDirectory(skill.path, canonicalDir, agentType, options.disableModelInvocation);
       }
     } else {
       // Symlink mode: copy to canonical location and symlink to agent location
       await cleanAndCreateDirectory(canonicalDir);
-      await copyDirectory(skill.path, canonicalDir, agentType);
+      await copyDirectory(skill.path, canonicalDir, agentType, options.disableModelInvocation);
     }
 
     // For universal agents with global install, the skill is already in the canonical
@@ -441,7 +443,7 @@ export async function installSkillForAgent(
     if (!symlinkCreated) {
       // Symlink failed, fall back to copy
       await cleanAndCreateDirectory(agentDir);
-      await copyDirectory(skill.path, agentDir, agentType);
+      await copyDirectory(skill.path, agentDir, agentType, options.disableModelInvocation);
 
       return {
         success: true,
@@ -510,7 +512,21 @@ function stripIgnoredEveFrontmatter(raw: string): string {
   return `---\n${frontmatter}\n---\n${content.replace(/^\r?\n/u, '')}`;
 }
 
-async function copyDirectory(src: string, dest: string, agentType?: AgentType): Promise<void> {
+function transformSkillMarkdown(
+  raw: string,
+  agentType?: AgentType,
+  disableModelInvocation?: boolean
+): string {
+  const formatted = agentType === 'eve' ? stripIgnoredEveFrontmatter(raw) : raw;
+  return disableModelInvocation ? applyDisableModelInvocation(formatted) : formatted;
+}
+
+async function copyDirectory(
+  src: string,
+  dest: string,
+  agentType?: AgentType,
+  disableModelInvocation?: boolean
+): Promise<void> {
   await mkdir(dest, { recursive: true });
 
   const entries = await readdir(src, { withFileTypes: true });
@@ -524,13 +540,20 @@ async function copyDirectory(src: string, dest: string, agentType?: AgentType): 
         const destPath = join(dest, entry.name);
 
         if (entry.isDirectory()) {
-          await copyDirectory(srcPath, destPath, agentType);
+          await copyDirectory(srcPath, destPath, agentType, disableModelInvocation);
         } else {
           try {
-            if (agentType === 'eve' && entry.name.toLowerCase() === 'skill.md') {
+            if (
+              (agentType === 'eve' || disableModelInvocation) &&
+              entry.name.toLowerCase() === 'skill.md'
+            ) {
               await writeFile(
                 destPath,
-                stripIgnoredEveFrontmatter(await readFile(srcPath, 'utf-8'))
+                transformSkillMarkdown(
+                  await readFile(srcPath, 'utf-8'),
+                  agentType,
+                  disableModelInvocation
+                )
               );
               return;
             }
@@ -667,7 +690,13 @@ export function getCanonicalPath(
 export async function installRemoteSkillForAgent(
   skill: RemoteSkill,
   agentType: AgentType,
-  options: { global?: boolean; cwd?: string; mode?: InstallMode; eveSubagent?: string } = {}
+  options: {
+    global?: boolean;
+    cwd?: string;
+    mode?: InstallMode;
+    eveSubagent?: string;
+    disableModelInvocation?: boolean;
+  } = {}
 ): Promise<InstallResult> {
   const agent = agents[agentType];
   const isGlobal = options.global ?? false;
@@ -727,7 +756,7 @@ export async function installRemoteSkillForAgent(
       const skillMdPath = join(agentDir, skillFileName);
       await writeFile(
         skillMdPath,
-        agentType === 'eve' ? stripIgnoredEveFrontmatter(skill.content) : skill.content,
+        transformSkillMarkdown(skill.content, agentType, options.disableModelInvocation),
         'utf-8'
       );
 
@@ -745,7 +774,7 @@ export async function installRemoteSkillForAgent(
     const skillMdPath = join(canonicalDir, skillFileName);
     await writeFile(
       skillMdPath,
-      agentType === 'eve' ? stripIgnoredEveFrontmatter(skill.content) : skill.content,
+      transformSkillMarkdown(skill.content, agentType, options.disableModelInvocation),
       'utf-8'
     );
 
@@ -769,7 +798,7 @@ export async function installRemoteSkillForAgent(
       const agentSkillMdPath = join(agentDir, agentSkillFileName);
       await writeFile(
         agentSkillMdPath,
-        agentType === 'eve' ? stripIgnoredEveFrontmatter(skill.content) : skill.content,
+        transformSkillMarkdown(skill.content, agentType, options.disableModelInvocation),
         'utf-8'
       );
 
@@ -808,7 +837,13 @@ export async function installRemoteSkillForAgent(
 export async function installWellKnownSkillForAgent(
   skill: WellKnownSkill,
   agentType: AgentType,
-  options: { global?: boolean; cwd?: string; mode?: InstallMode; eveSubagent?: string } = {}
+  options: {
+    global?: boolean;
+    cwd?: string;
+    mode?: InstallMode;
+    eveSubagent?: string;
+    disableModelInvocation?: boolean;
+  } = {}
 ): Promise<InstallResult> {
   const agent = agents[agentType];
   const isGlobal = options.global ?? false;
@@ -876,12 +911,12 @@ export async function installWellKnownSkillForAgent(
         await mkdir(parentDir, { recursive: true });
       }
 
+      const isSkillMd =
+        basename(filePath).toLowerCase() === 'skill.md' && typeof content === 'string';
       await writeFile(
         fullPath,
-        agentType === 'eve' &&
-          basename(filePath).toLowerCase() === 'skill.md' &&
-          typeof content === 'string'
-          ? stripIgnoredEveFrontmatter(content)
+        isSkillMd
+          ? transformSkillMarkdown(content, agentType, options.disableModelInvocation)
           : content
       );
     }
@@ -988,7 +1023,15 @@ export async function installBlobSkillForAgent(
     try {
       await mkdir(agentBase, { recursive: true });
       await rm(flatSkillPath, { recursive: true, force: true });
-      await writeFile(flatSkillPath, getEveFlatSkillMarkdown(skill.files), 'utf-8');
+      await writeFile(
+        flatSkillPath,
+        transformSkillMarkdown(
+          getEveFlatSkillMarkdown(skill.files),
+          undefined,
+          options.disableModelInvocation
+        ),
+        'utf-8'
+      );
       return { success: true, path: flatSkillPath, mode: 'copy' };
     } catch (error) {
       return {
@@ -1037,8 +1080,8 @@ export async function installBlobSkillForAgent(
 
       await writeFile(
         fullPath,
-        agentType === 'eve' && basename(file.path).toLowerCase() === 'skill.md'
-          ? stripIgnoredEveFrontmatter(file.contents)
+        basename(file.path).toLowerCase() === 'skill.md'
+          ? transformSkillMarkdown(file.contents, agentType, options.disableModelInvocation)
           : file.contents,
         'utf-8'
       );

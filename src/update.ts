@@ -328,6 +328,7 @@ export interface WellKnownUpdateItem {
   name: string;
   digest: string;
   subagents?: string[];
+  disableModelInvocation?: boolean;
 }
 
 export type WellKnownCheckResult =
@@ -455,11 +456,13 @@ export async function processWellKnownUpdates(
       const safeName = sanitizeMetadata(name);
       console.log(`${TEXT}Updating ${safeName}…${RESET}`);
 
-      const subagents = itemByName.get(name)?.subagents;
+      const item = itemByName.get(name);
+      const subagents = item?.subagents;
       const subagentArgs =
         !isGlobal && subagents?.length
           ? ['--subagent', ...subagents.map((s) => (s === '' ? 'root' : s))]
           : [];
+      const dmiArgs = item?.disableModelInvocation ? ['--disable-model-invocation'] : [];
 
       const spawnResult = spawnSync(
         process.execPath,
@@ -470,6 +473,7 @@ export async function processWellKnownUpdates(
           '--skill',
           name,
           ...subagentArgs,
+          ...dmiArgs,
           ...(isGlobal ? ['-g'] : []),
           '-y',
         ],
@@ -522,7 +526,11 @@ export async function updateGlobalSkills(
 
     if (entry.sourceType === 'well-known' && entry.sourceBaseUrl && entry.wellKnownDigest) {
       const group = wellKnownGroups.get(entry.sourceBaseUrl) || [];
-      group.push({ name: skillName, digest: entry.wellKnownDigest });
+      group.push({
+        name: skillName,
+        digest: entry.wellKnownDigest,
+        disableModelInvocation: entry.disableModelInvocation,
+      });
       wellKnownGroups.set(entry.sourceBaseUrl, group);
       continue;
     }
@@ -718,9 +726,20 @@ export async function updateGlobalSkills(
       continue;
     }
     const fullDepthArgs = shouldUseFullDepthForUpdate(update.entry) ? ['--full-depth'] : [];
+    const dmiArgs = update.entry.disableModelInvocation ? ['--disable-model-invocation'] : [];
     const result = spawnSync(
       process.execPath,
-      [cliEntry, 'add', installUrl, '--skill', update.name, ...fullDepthArgs, '-g', '-y'],
+      [
+        cliEntry,
+        'add',
+        installUrl,
+        '--skill',
+        update.name,
+        ...fullDepthArgs,
+        ...dmiArgs,
+        '-g',
+        '-y',
+      ],
       {
         stdio: ['inherit', 'pipe', 'pipe'],
         encoding: 'utf-8',
@@ -774,6 +793,7 @@ export async function updateProjectSkills(
         name: skill.name,
         digest: entry.wellKnownDigest,
         subagents: entry.subagents,
+        disableModelInvocation: entry.disableModelInvocation,
       });
       wellKnownGroups.set(entry.sourceUrl, group);
     } else {
@@ -955,6 +975,7 @@ export async function updateProjectSkills(
         ? ['--subagent', ...skill.entry.subagents.map((s) => (s === '' ? 'root' : s))]
         : [];
       const fullDepthArgs = shouldUseFullDepthForUpdate(entry) ? ['--full-depth'] : [];
+      const dmiArgs = skill.entry.disableModelInvocation ? ['--disable-model-invocation'] : [];
 
       const result = spawnSync(
         process.execPath,
@@ -966,6 +987,7 @@ export async function updateProjectSkills(
           skill.name,
           ...subagentArgs,
           ...fullDepthArgs,
+          ...dmiArgs,
           '-y',
         ],
         {

@@ -69,4 +69,39 @@ describe('experimental_install', () => {
     expect(result.stdout).toContain('Failed to install from');
     expect(installed('beta')).toBe(true);
   });
+
+  it('preserves disableModelInvocation from skills-lock.json per skill', () => {
+    writeSkill(join(testDir, 'src', 'alpha'), 'alpha');
+    writeSkill(join(testDir, 'src', 'beta'), 'beta');
+    writeFileSync(
+      join(testDir, 'skills-lock.json'),
+      JSON.stringify({
+        version: 1,
+        skills: {
+          alpha: {
+            source: './src',
+            sourceType: 'local',
+            computedHash: 'x',
+            disableModelInvocation: true,
+          },
+          beta: {
+            source: './src',
+            sourceType: 'local',
+            computedHash: 'x',
+          },
+        },
+      })
+    );
+
+    const result = runCli(['experimental_install'], testDir);
+
+    expect(result.exitCode).toBe(0);
+    const alphaMd = readFileSync(join(testDir, '.agents', 'skills', 'alpha', 'SKILL.md'), 'utf-8');
+    const betaMd = readFileSync(join(testDir, '.agents', 'skills', 'beta', 'SKILL.md'), 'utf-8');
+    expect(alphaMd).toContain('disable-model-invocation: true');
+    expect(betaMd).not.toContain('disable-model-invocation');
+    const lock = JSON.parse(readFileSync(join(testDir, 'skills-lock.json'), 'utf-8'));
+    expect(lock.skills.alpha.disableModelInvocation).toBe(true);
+    expect(lock.skills.beta.disableModelInvocation).toBeUndefined();
+  });
 });

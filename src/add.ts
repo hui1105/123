@@ -580,6 +580,8 @@ export interface AddOptions {
    * selects the root agent. Implies installing for Eve.
    */
   subagent?: string[];
+  /** Set `disable-model-invocation: true` in the installed SKILL.md frontmatter. */
+  disableModelInvocation?: boolean;
   /** Output results as a JSON array (machine-readable, no ANSI codes). */
   json?: boolean;
 }
@@ -964,6 +966,7 @@ async function handleWellKnownSkills(
       const result = await installWellKnownSkillForAgent(skill, agent, {
         global: installGlobally,
         mode: installMode,
+        disableModelInvocation: options.disableModelInvocation,
       });
       results.push({
         skill: skill.installName,
@@ -1014,6 +1017,7 @@ async function handleWellKnownSkills(
             skillFolderHash: '',
             sourceBaseUrl: url,
             wellKnownDigest: computeWellKnownSkillDigest(skill),
+            ...(options.disableModelInvocation && { disableModelInvocation: true }),
           });
         } catch {
           // Don't fail installation if lock file update fails
@@ -1039,6 +1043,7 @@ async function handleWellKnownSkills(
                 sourceType: 'well-known',
                 computedHash,
                 wellKnownDigest: computeWellKnownSkillDigest(skill),
+                ...(options.disableModelInvocation && { disableModelInvocation: true }),
               },
               cwd
             );
@@ -1238,6 +1243,7 @@ async function installToTargets(
     global: boolean;
     mode: InstallMode;
     createMissingAgentRoot: (agent: AgentType) => boolean;
+    disableModelInvocation?: boolean;
   }
 ): Promise<TargetInstallResult[]> {
   const results: TargetInstallResult[] = [];
@@ -1249,6 +1255,7 @@ async function installToTargets(
         mode: options.mode,
         eveSubagent: subagent,
         createMissingAgentRoot: options.createMissingAgentRoot(agent),
+        disableModelInvocation: options.disableModelInvocation,
       };
       let result;
       if (resolved.blobResult && 'files' in skill) {
@@ -1340,6 +1347,7 @@ export async function installFromSource(
     skills: string[];
     agents: AgentType[];
     via?: string;
+    disableModelInvocation?: boolean;
     select?: (skills: Skill[]) => Promise<Skill[]>;
   }
 ): Promise<SourceInstallResult> {
@@ -1360,14 +1368,23 @@ export async function installFromSource(
       resolved,
       selected,
       options.agents.map((agent) => ({ agent })),
-      { global: false, mode: 'symlink', createMissingAgentRoot: () => true }
+      {
+        global: false,
+        mode: 'symlink',
+        createMissingAgentRoot: () => true,
+        disableModelInvocation: options.disableModelInvocation,
+      }
     );
     const installed = new Set(results.filter((r) => r.success).map((r) => r.skill));
     const repoPaths = getSkillRepoPaths(resolved, selected);
     for (const skill of selected) {
       if (!installed.has(getSkillDisplayName(skill))) continue;
       const entry = projectLockEntry(parsed, repoPaths[skill.name], await sourceSkillHash(skill));
-      await addSkillToLocalLock(skill.name, { ...entry, ...(options.via && { via: options.via }) });
+      await addSkillToLocalLock(skill.name, {
+        ...entry,
+        ...(options.via && { via: options.via }),
+        ...(options.disableModelInvocation && { disableModelInvocation: true }),
+      });
     }
     return {
       installed: [...installed],
@@ -2154,6 +2171,7 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       global: installGlobally,
       mode: installMode,
       createMissingAgentRoot: (agent) => explicitlySelectedAgents.has(agent),
+      disableModelInvocation: options.disableModelInvocation,
     });
 
     spinner.stop('Installation complete');
@@ -2268,6 +2286,7 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
               skillPath: skillPathValue,
               skillFolderHash,
               pluginName: skill.pluginName,
+              ...(options.disableModelInvocation && { disableModelInvocation: true }),
             });
           } catch {
             // Don't fail installation if lock file update fails
@@ -2299,6 +2318,7 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
               {
                 ...projectLockEntry(parsed, skillPathValue, computedHash),
                 ...(recordSubagents && { subagents: eveSubagents }),
+                ...(options.disableModelInvocation && { disableModelInvocation: true }),
               },
               cwd
             );
@@ -2628,6 +2648,8 @@ export function parseAddOptions(args: string[]): {
       options.json = true;
     } else if (arg === '--copy') {
       options.copy = true;
+    } else if (arg === '--disable-model-invocation') {
+      options.disableModelInvocation = true;
     } else if (arg === '--subagent') {
       options.subagent = options.subagent || [];
       i++;

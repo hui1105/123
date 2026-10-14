@@ -145,6 +145,8 @@ ${BOLD}Add Options:${RESET}
   --subagent <names>     Install to Eve subagents (use 'root' for the root agent)
   --all                  Shorthand for --skill '*' --agent '*' -y
   --full-depth           Search all subdirectories even when a root SKILL.md exists
+  --disable-model-invocation
+                         Set disable-model-invocation: true in installed SKILL.md frontmatter
   --json                 Output results as JSON (machine-readable, no ANSI codes)
 
 ${BOLD}Use Options:${RESET}

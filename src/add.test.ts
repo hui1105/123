@@ -175,6 +175,58 @@ Instructions here.
     expect(lock.skills['my-skill'].source).toBe(testDir);
   });
 
+  it('sets disable-model-invocation: true in installed SKILL.md and lockfiles when --disable-model-invocation is passed', () => {
+    const sourceSkillDir = join(testDir, 'skills', 'invoke-only-skill');
+    mkdirSync(sourceSkillDir, { recursive: true });
+    const sourceSkillMd = join(sourceSkillDir, 'SKILL.md');
+    writeFileSync(
+      sourceSkillMd,
+      `---
+name: invoke-only-skill
+description: Skill that should only be invoked explicitly
+---
+
+# Invoke Only Skill
+`
+    );
+
+    const home = join(testDir, 'home');
+    mkdirSync(home, { recursive: true });
+    const projectDir = join(testDir, 'project');
+    mkdirSync(projectDir, { recursive: true });
+
+    // Project-scoped install with --disable-model-invocation
+    const projectResult = runCli(
+      ['add', testDir, '-y', '--agent', 'cursor', '--disable-model-invocation'],
+      projectDir,
+      { HOME: home, USERPROFILE: home }
+    );
+    expect(projectResult.exitCode).toBe(0);
+
+    const installedProjectMd = readFileSync(
+      join(projectDir, '.agents', 'skills', 'invoke-only-skill', 'SKILL.md'),
+      'utf-8'
+    );
+    expect(installedProjectMd).toContain('disable-model-invocation: true');
+    // Source file must remain untouched
+    expect(readFileSync(sourceSkillMd, 'utf-8')).not.toContain('disable-model-invocation');
+
+    const localLock = JSON.parse(readFileSync(join(projectDir, 'skills-lock.json'), 'utf-8'));
+    expect(localLock.skills['invoke-only-skill'].disableModelInvocation).toBe(true);
+
+    // Global install with --disable-model-invocation
+    const globalResult = runCli(
+      ['add', testDir, '-y', '-g', '--agent', 'cursor', '--disable-model-invocation'],
+      projectDir,
+      { HOME: home, USERPROFILE: home }
+    );
+    expect(globalResult.exitCode).toBe(0);
+
+    const globalLockPath = join(home, '.local', 'state', 'skills', '.skill-lock.json');
+    const globalLock = JSON.parse(readFileSync(globalLockPath, 'utf-8'));
+    expect(globalLock.skills['invoke-only-skill'].disableModelInvocation).toBe(true);
+  });
+
   it('creates the project symlink for an explicitly selected non-universal agent', () => {
     const sourceDir = join(testDir, 'source');
     const skillDir = join(sourceDir, 'skills', 'kiro-skill');
@@ -1137,6 +1189,13 @@ describe('parseAddOptions', () => {
     const result = parseAddOptions(['source', '--subagent', 'research', '-y']);
     expect(result.source).toEqual(['source']);
     expect(result.options.subagent).toEqual(['research']);
+    expect(result.options.yes).toBe(true);
+  });
+
+  it('should parse --disable-model-invocation flag', () => {
+    const result = parseAddOptions(['source', '--disable-model-invocation', '-y']);
+    expect(result.source).toEqual(['source']);
+    expect(result.options.disableModelInvocation).toBe(true);
     expect(result.options.yes).toBe(true);
   });
 });
